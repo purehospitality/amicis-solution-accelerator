@@ -6,14 +6,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // MockRedisClient provides a test double for Redis
@@ -34,7 +33,7 @@ func (m *MockRedisClient) Get(ctx context.Context, key string) *redis.StringCmd 
 	return cmd
 }
 
-func (m *MockRedisClient) Set(ctx context.Context, key string, value interface{}, expiration interface{}) *redis.StatusCmd {
+func (m *MockRedisClient) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
 	cmd := redis.NewStatusCmd(ctx)
 	if m.error != nil {
 		cmd.SetErr(m.error)

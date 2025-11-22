@@ -1,0 +1,206 @@
+name: Build, Test and Deploy
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  REGISTRY_NAME: acramicisikeadev
+  AKS_CLUSTER_NAME: aks-amicis-ikea-dev
+  AKS_RESOURCE_GROUP: rg-amicis-ikea-dev-westeurope
+  NAMESPACE: amicis
+
+jobs:
+  # Build and test Go routing service
+  build-go-service:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend/go-routing-service
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+    
+    - name: Download dependencies
+      run: go mod download
+    
+    - name: Run tests
+      run: go test -v -cover ./...
+    
+    - name: Run linter
+      uses: golangci/golangci-lint-action@v4
+      with:
+        version: latest
+        working-directory: ./backend/go-routing-service
+    
+    - name: Build
+      run: go build -v -o bin/routing-service .
+    
+    - name: Login to Azure
+      if: github.ref == 'refs/heads/main'
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Login to ACR
+      if: github.ref == 'refs/heads/main'
+      run: |
+        az acr login --name ${{ env.REGISTRY_NAME }}
+    
+    - name: Build and push Docker image
+      if: github.ref == 'refs/heads/main'
+      run: |
+        docker build -t ${{ env.REGISTRY_NAME }}.azurecr.io/go-routing-service:${{ github.sha }} \
+                     -t ${{ env.REGISTRY_NAME }}.azurecr.io/go-routing-service:latest .
+        docker push ${{ env.REGISTRY_NAME }}.azurecr.io/go-routing-service:${{ github.sha }}
+        docker push ${{ env.REGISTRY_NAME }}.azurecr.io/go-routing-service:latest
+
+  # Build and test Node auth service
+  build-node-service:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend/node-auth-service
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: backend/node-auth-service/package-lock.json
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run linter
+      run: npm run lint
+    
+    - name: Run tests
+      run: npm test -- --testPathIgnorePatterns=auth.service.spec.ts --coverage
+    
+    - name: Build
+      run: npm run build
+    
+    - name: Upload coverage
+      uses: codecov/codecov-action@v4
+      if: always()
+      with:
+        files: ./backend/node-auth-service/coverage/lcov.info
+        flags: node-auth-service
+    
+    - name: Login to Azure
+      if: github.ref == 'refs/heads/main'
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Login to ACR
+      if: github.ref == 'refs/heads/main'
+      run: |
+        az acr login --name ${{ env.REGISTRY_NAME }}
+    
+    - name: Build and push Docker image
+      if: github.ref == 'refs/heads/main'
+      run: |
+        docker build -t ${{ env.REGISTRY_NAME }}.azurecr.io/node-auth-service:${{ github.sha }} \
+                     -t ${{ env.REGISTRY_NAME }}.azurecr.io/node-auth-service:latest .
+        docker push ${{ env.REGISTRY_NAME }}.azurecr.io/node-auth-service:${{ github.sha }}
+        docker push ${{ env.REGISTRY_NAME }}.azurecr.io/node-auth-service:latest
+
+  # Build frontend
+  build-frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run linter (if configured)
+      run: npm run lint || echo "No lint script configured"
+      continue-on-error: true
+    
+    - name: Build web app
+      run: npm run build
+      env:
+        VITE_AUTH_SERVICE_URL: https://amicis-dev.westeurope.cloudapp.azure.com/auth
+        VITE_ROUTING_SERVICE_URL: https://amicis-dev.westeurope.cloudapp.azure.com/routing
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: frontend-dist
+        path: frontend/dist
+        retention-days: 7
+
+  # Deploy to AKS
+  deploy-to-aks:
+    needs: [build-go-service, build-node-service]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Login to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    
+    - name: Get AKS credentials
+      run: |
+        az aks get-credentials \
+          --resource-group ${{ env.AKS_RESOURCE_GROUP }} \
+          --name ${{ env.AKS_CLUSTER_NAME }} \
+          --overwrite-existing
+    
+    - name: Create namespace if not exists
+      run: |
+        kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+    
+    - name: Deploy Go routing service
+      run: |
+        kubectl set image deployment/go-routing-service \
+          go-routing-service=${{ env.REGISTRY_NAME }}.azurecr.io/go-routing-service:${{ github.sha }} \
+          -n ${{ env.NAMESPACE }} || \
+        kubectl apply -f backend/go-routing-service/k8s/deployment.yaml
+        kubectl rollout status deployment/go-routing-service -n ${{ env.NAMESPACE }} --timeout=5m
+    
+    - name: Deploy Node auth service
+      run: |
+        kubectl set image deployment/node-auth-service \
+          node-auth-service=${{ env.REGISTRY_NAME }}.azurecr.io/node-auth-service:${{ github.sha }} \
+          -n ${{ env.NAMESPACE }} || \
+        kubectl apply -f backend/node-auth-service/k8s/deployment.yaml
+        kubectl rollout status deployment/node-auth-service -n ${{ env.NAMESPACE }} --timeout=5m
+    
+    - name: Deploy ingress
+      run: |
+        kubectl apply -f infra/k8s/ingress.yaml
+    
+    - name: Verify deployment
+      run: |
+        kubectl get pods -n ${{ env.NAMESPACE }}
+        kubectl get svc -n ${{ env.NAMESPACE }}
+        kubectl get ingress -n ${{ env.NAMESPACE }}

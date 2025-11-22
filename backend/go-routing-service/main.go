@@ -39,6 +39,13 @@ type Location struct {
 	Lon float64 `bson:"lon"`
 }
 
+// RedisClient interface for testing
+type RedisClient interface {
+	Get(ctx context.Context, key string) *redis.StringCmd
+	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
+	Ping(ctx context.Context) *redis.StatusCmd
+}
+
 // HealthResponse represents the health check response
 type HealthResponse struct {
 	Status       string            `json:"status"`
@@ -48,7 +55,7 @@ type HealthResponse struct {
 // App holds the application dependencies
 type App struct {
 	mongoClient *mongo.Client
-	redisClient *redis.Client
+	redisClient RedisClient
 	storesDB    *mongo.Collection
 }
 
@@ -156,13 +163,15 @@ func (app *App) healthHandler(w http.ResponseWriter, r *http.Request) {
 	statusCode := http.StatusOK
 
 	// Check MongoDB connection
-	if err := app.mongoClient.Ping(ctx, nil); err != nil {
-		dependencies["mongodb"] = "unhealthy"
-		status = "degraded"
-		statusCode = http.StatusServiceUnavailable
-		log.Error().Err(err).Msg("MongoDB health check failed")
-	} else {
-		dependencies["mongodb"] = "healthy"
+	if app.mongoClient != nil {
+		if err := app.mongoClient.Ping(ctx, nil); err != nil {
+			dependencies["mongodb"] = "unhealthy"
+			status = "degraded"
+			statusCode = http.StatusServiceUnavailable
+			log.Error().Err(err).Msg("MongoDB health check failed")
+		} else {
+			dependencies["mongodb"] = "healthy"
+		}
 	}
 
 	// Check Redis connection
