@@ -1,0 +1,41 @@
+import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
+import { AuthService } from './auth.service';
+import { TokenExchangeDto } from './dto/token-exchange.dto';
+
+@ApiTags('auth')
+@Controller('auth')
+export class AuthController {
+  constructor(private readonly authService: AuthService) {}
+
+  @Post('exchange')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ 
+    summary: 'Exchange user token for backend access token',
+    description: 'Accepts a tenant-prefixed user token and returns a backend-specific access token with tenant information'
+  })
+  @ApiBody({ type: TokenExchangeDto })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Token exchange successful',
+    schema: {
+      type: 'object',
+      properties: {
+        accessToken: { type: 'string', example: 'backend-token-for-ikea' },
+        expiresIn: { type: 'number', example: 3600 },
+        tenant: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', example: 'ikea' },
+            name: { type: 'string', example: 'IKEA' }
+          }
+        }
+      }
+    }
+  })
+  @ApiResponse({ status: 401, description: 'Invalid token format' })
+  @ApiResponse({ status: 404, description: 'Tenant not found' })
+  async exchangeToken(@Body() tokenExchangeDto: TokenExchangeDto) {
+    return this.authService.exchangeToken(tokenExchangeDto.userToken);
+  }
+}

@@ -1,0 +1,129 @@
+version: '3.8'
+
+services:
+  # Redis Cache for routing data
+  redis:
+    image: redis:7-alpine
+    container_name: amicis-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass devpassword
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - amicis-network
+
+  # Azure Cosmos DB Emulator (Windows only - alternative approach for cross-platform)
+  # For local dev, we'll use actual Azure Cosmos DB free tier or MongoDB API
+  # Uncomment if using Azure Cosmos DB Emulator on Windows:
+  # cosmos-emulator:
+  #   image: mcr.microsoft.com/cosmosdb/windows/azure-cosmos-emulator
+  #   platform: windows
+  #   ports:
+  #     - "8081:8081"
+  #     - "10251-10254:10251-10254"
+  #   environment:
+  #     - AZURE_COSMOS_EMULATOR_PARTITION_COUNT=10
+  #     - AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE=true
+
+  # MongoDB (as Cosmos DB alternative for local dev with MongoDB API)
+  mongodb:
+    image: mongo:7
+    container_name: amicis-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: devpassword
+      MONGO_INITDB_DATABASE: amicis
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - amicis-network
+
+  # MongoDB Seed Service (runs once to populate initial data)
+  mongodb-seed:
+    image: node:20-alpine
+    container_name: amicis-mongodb-seed
+    working_dir: /app
+    volumes:
+      - ./scripts:/app
+    environment:
+      - COSMOS_ENDPOINT=mongodb://admin:devpassword@mongodb:27017
+      - COSMOS_DATABASE=amicis
+    command: sh -c "npm install mongodb && node seed-mongodb.js"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - amicis-network
+    restart: "no"
+
+  # Go Routing Service
+  go-routing-service:
+    build:
+      context: ./backend/go-routing-service
+      dockerfile: Dockerfile
+    container_name: amicis-routing-service
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - REDIS_HOST=redis:6379
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=devpassword
+      - COSMOS_ENDPOINT=${COSMOS_ENDPOINT:-mongodb://admin:devpassword@mongodb:27017}
+      - LOG_LEVEL=info
+    depends_on:
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    networks:
+      - amicis-network
+    restart: unless-stopped
+
+  # NestJS Auth Service
+  node-auth-service:
+    build:
+      context: ./backend/node-auth-service
+      dockerfile: Dockerfile
+    container_name: amicis-auth-service
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=development
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=devpassword
+      - COSMOS_ENDPOINT=${COSMOS_ENDPOINT:-mongodb://admin:devpassword@mongodb:27017}
+      - LOG_LEVEL=log
+    depends_on:
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    networks:
+      - amicis-network
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+    driver: local
+  mongodb-data:
+    driver: local
+
+networks:
+  amicis-network:
+    driver: bridge
