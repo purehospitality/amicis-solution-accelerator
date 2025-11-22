@@ -1,0 +1,160 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: amicis
+  labels:
+    name: amicis
+    environment: dev
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: go-routing-service-config
+  namespace: amicis
+data:
+  PORT: "8080"
+  COSMOS_DATABASE: "amicis"
+  REDIS_HOST: "redis-amicis-ikea-dev.redis.cache.windows.net:6380"
+  ENV: "production"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-routing-service
+  namespace: amicis
+  labels:
+    app: go-routing-service
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: go-routing-service
+  template:
+    metadata:
+      labels:
+        app: go-routing-service
+        version: v1
+    spec:
+      containers:
+      - name: routing-service
+        image: acramicisikeadev.azurecr.io/go-routing-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: go-routing-service-config
+              key: PORT
+        - name: COSMOS_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: cosmos-connection
+              key: endpoint
+        - name: COSMOS_DATABASE
+          valueFrom:
+            configMapKeyRef:
+              name: go-routing-service-config
+              key: COSMOS_DATABASE
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: go-routing-service-config
+              key: REDIS_HOST
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-connection
+              key: password
+        - name: ENV
+          valueFrom:
+            configMapKeyRef:
+              name: go-routing-service-config
+              key: ENV
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: go-routing-service
+  namespace: amicis
+  labels:
+    app: go-routing-service
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: go-routing-service
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: go-routing-service-hpa
+  namespace: amicis
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: go-routing-service
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+      - type: Pods
+        value: 2
+        periodSeconds: 30
+      selectPolicy: Max
