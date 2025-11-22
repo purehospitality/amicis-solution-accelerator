@@ -9,13 +9,14 @@ terraform {
   }
 
   # Backend configuration for remote state storage
-  # Uncomment and configure after creating Azure Storage Account for state
-  # backend "azurerm" {
-  #   resource_group_name  = "rg-amicis-terraform-state"
-  #   storage_account_name = "stamicistfstate"
-  #   container_name       = "tfstate"
-  #   key                  = "ikea-pilot/dev/terraform.tfstate"
-  # }
+  # Run scripts/setup-terraform-state.ps1 first to create the storage account
+  # Then uncomment this block and run 'terraform init' to migrate state
+  backend "azurerm" {
+    resource_group_name  = "rg-amicis-terraform-state"
+    storage_account_name = "stamicistfstate"  # Must be globally unique - update if needed
+    container_name       = "tfstate"
+    key                  = "ikea-pilot/dev/terraform.tfstate"
+  }
 }
 
 provider "azurerm" {
