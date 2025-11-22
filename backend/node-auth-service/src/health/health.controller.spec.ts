@@ -2,24 +2,31 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { HealthController } from './health.controller';
 import { DatabaseService } from '../database/database.service';
 import { HttpStatus } from '@nestjs/common';
-import Redis from 'ioredis';
 
-jest.mock('ioredis');
+// Mock Redis instance that will be returned by the constructor
+const mockRedisInstance = {
+  connect: jest.fn(),
+  ping: jest.fn(),
+  disconnect: jest.fn(),
+  quit: jest.fn(),
+};
+
+// Mock ioredis module with both default and named exports
+jest.mock('ioredis', () => {
+  const mockConstructor = jest.fn().mockImplementation(() => mockRedisInstance);
+  return {
+    __esModule: true,
+    default: mockConstructor,
+  };
+});
 
 describe('HealthController', () => {
   let controller: HealthController;
   let databaseService: DatabaseService;
-  let redisMock: jest.Mocked<Redis>;
 
   beforeEach(async () => {
-    redisMock = {
-      connect: jest.fn(),
-      ping: jest.fn(),
-      disconnect: jest.fn(),
-      quit: jest.fn(),
-    } as any;
-
-    (Redis as jest.MockedClass<typeof Redis>).mockImplementation(() => redisMock);
+    // Reset mocks
+    jest.clearAllMocks();
 
     const mockDb = {
       admin: jest.fn().mockReturnValue({
@@ -49,8 +56,8 @@ describe('HealthController', () => {
 
   describe('check', () => {
     it('should return healthy status when all dependencies are up', async () => {
-      redisMock.connect.mockResolvedValue(undefined);
-      redisMock.ping.mockResolvedValue('PONG');
+      mockRedisInstance.connect.mockResolvedValue(undefined);
+      mockRedisInstance.ping.mockResolvedValue('PONG');
 
       const result = await controller.check();
 
@@ -62,7 +69,7 @@ describe('HealthController', () => {
     });
 
     it('should return degraded status when Redis is down', async () => {
-      redisMock.connect.mockRejectedValue(new Error('Connection refused'));
+      mockRedisInstance.connect.mockRejectedValue(new Error('Connection refused'));
 
       const result = await controller.check();
 
@@ -80,8 +87,8 @@ describe('HealthController', () => {
       };
 
       jest.spyOn(databaseService, 'getDatabase').mockReturnValue(mockDb as any);
-      redisMock.connect.mockResolvedValue(undefined);
-      redisMock.ping.mockResolvedValue('PONG');
+      mockRedisInstance.connect.mockResolvedValue(undefined);
+      mockRedisInstance.ping.mockResolvedValue('PONG');
 
       await expect(controller.check()).rejects.toMatchObject({
         status: HttpStatus.SERVICE_UNAVAILABLE,
@@ -89,8 +96,8 @@ describe('HealthController', () => {
     });
 
     it('should measure response times for dependencies', async () => {
-      redisMock.connect.mockResolvedValue(undefined);
-      redisMock.ping.mockResolvedValue('PONG');
+      mockRedisInstance.connect.mockResolvedValue(undefined);
+      mockRedisInstance.ping.mockResolvedValue('PONG');
 
       const result = await controller.check();
 
@@ -102,7 +109,7 @@ describe('HealthController', () => {
   describe('onModuleDestroy', () => {
     it('should close Redis connection on destroy', async () => {
       await controller.onModuleDestroy();
-      expect(redisMock.quit).toHaveBeenCalled();
+      expect(mockRedisInstance.quit).toHaveBeenCalled();
     });
   });
 });
