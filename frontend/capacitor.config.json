@@ -1,0 +1,8 @@
+{
+  "appId": "com.amicis.retail",
+  "appName": "Amicis",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}

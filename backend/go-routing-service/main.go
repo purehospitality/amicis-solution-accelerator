@@ -126,10 +126,17 @@ func main() {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 
-	// Routes
-	r.Get("/health", app.healthHandler)
-	r.Route("/api/v1", func(r chi.Router) {
-		r.Get("/route", app.routeHandler)
+	// Public routes (no JWT required)
+	r.Group(func(r chi.Router) {
+		r.Get("/health", app.healthHandler)
+	})
+
+	// Protected routes (JWT required)
+	r.Group(func(r chi.Router) {
+		r.Use(JWTMiddleware)
+		r.Route("/api/v1", func(r chi.Router) {
+			r.Get("/route", app.routeHandler)
+		})
 	})
 
 	// Start server
@@ -181,7 +188,16 @@ func (app *App) healthHandler(w http.ResponseWriter, r *http.Request) {
 
 // routeHandler handles GET /api/v1/route requests with Redis cache and MongoDB fallback
 func (app *App) routeHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := context.Background()
+	ctx := r.Context()
+	
+	// Get authenticated user from context
+	user, ok := GetUserFromContext(ctx)
+	if ok {
+		log.Debug().
+			Str("user", user.Sub).
+			Str("tenant", user.TenantID).
+			Msg("Processing route request for authenticated user")
+	}
 	
 	// Get storeId from query parameter
 	storeID := r.URL.Query().Get("storeId")

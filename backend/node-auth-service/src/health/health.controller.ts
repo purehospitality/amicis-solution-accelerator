@@ -1,6 +1,7 @@
 import { Controller, Get, HttpStatus, HttpException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { DatabaseService } from '../database/database.service';
+import { Public } from '../auth/decorators/public.decorator';
 import Redis from 'ioredis';
 
 interface HealthCheckResult {
@@ -27,6 +28,7 @@ export class HealthController {
     });
   }
 
+  @Public()
   @Get()
   @ApiOperation({ 
     summary: 'Health check endpoint',
