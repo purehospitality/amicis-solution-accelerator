@@ -4,7 +4,7 @@
 const { MongoClient } = require('mongodb');
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
-const DB_NAME = 'amicis-multi-tenant';
+const DB_NAME = 'amicis';
 
 const connectors = [
   {
