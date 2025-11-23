@@ -20,7 +20,7 @@ export default function WishlistPage() {
   const navigate = useNavigate();
   const { store } = location.state || {};
   
-  const { items, customerId, storeId, removeItem } = useWishlistStore();
+  const { items, customerId, setCustomerId, removeItem } = useWishlistStore();
   
   const [loading, setLoading] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -29,6 +29,10 @@ export default function WishlistPage() {
     if (!store) {
       navigate('/stores');
       return;
+    }
+
+    if (!customerId) {
+      setCustomerId('test-customer-789');
     }
 
     loadWishlist();
