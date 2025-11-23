@@ -42,8 +42,8 @@ export default function ProductsPage() {
     if (!customerId) {
       setCustomerId('test-customer-789'); // In production, this would come from auth
     }
-    if (storeId !== store.id) {
-      setStoreId(store.id);
+    if (storeId !== store.storeId) {
+      setStoreId(store.storeId);
     }
 
     loadProducts();
@@ -58,7 +58,7 @@ export default function ProductsPage() {
     
     try {
       const filters = category !== 'all' ? { category } : {};
-      const response = await apiClient.getProducts(store.id, filters);
+      const response = await apiClient.getProducts(store.storeId, filters);
       setProducts(response.products || []);
     } catch (err: any) {
       console.error('Failed to load products:', err);
@@ -72,7 +72,7 @@ export default function ProductsPage() {
     if (!store) return;
     
     try {
-      const response = await apiClient.getWishlist(store.id, customerId || 'test-customer-789');
+      const response = await apiClient.getWishlist(store.storeId, customerId || 'test-customer-789');
       // Sync wishlist from backend
       if (response.items) {
         // Update local store with backend items
@@ -97,7 +97,7 @@ export default function ProductsPage() {
     
     try {
       const response = await apiClient.addToWishlist(
-        store.id, 
+        store.storeId, 
         customerId || 'test-customer-789', 
         productId
       );
@@ -129,7 +129,7 @@ export default function ProductsPage() {
     
     try {
       await apiClient.removeFromWishlist(
-        store.id,
+        store.storeId,
         customerId || 'test-customer-789',
         wishlistItem.id
       );

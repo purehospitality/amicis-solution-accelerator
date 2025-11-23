@@ -41,7 +41,7 @@ export default function WishlistPage() {
     
     try {
       const response = await apiClient.getWishlist(
-        store.id, 
+        store.storeId, 
         customerId || 'test-customer-789'
       );
       
@@ -72,7 +72,7 @@ export default function WishlistPage() {
     
     try {
       await apiClient.removeFromWishlist(
-        store.id,
+        store.storeId,
         customerId || 'test-customer-789',
         item.id
       );
