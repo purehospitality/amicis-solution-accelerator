@@ -228,6 +228,11 @@ func main() {
 				r.Get("/products/{productId}", app.commerceProductHandler)
 				r.Post("/orders", app.commerceOrdersHandler)
 				r.Get("/connectors", app.commerceConnectorsHandler)
+				
+				// Wishlist routes
+				r.Get("/wishlist", app.commerceWishlistHandler)
+				r.Post("/wishlist/items", app.commerceAddToWishlistHandler)
+				r.Delete("/wishlist/items/{itemId}", app.commerceRemoveFromWishlistHandler)
 			})
 		})
 	})

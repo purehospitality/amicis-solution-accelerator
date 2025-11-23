@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/amicis/go-routing-service/internal/adapters/d365"
 	"github.com/amicis/go-routing-service/internal/domain/models"
@@ -12,6 +13,7 @@ import (
 	"github.com/amicis/go-routing-service/internal/registry"
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog/log"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // Commerce handlers - implements the connector gateway pattern
@@ -315,3 +317,236 @@ func (app *App) initializeConnectorRegistry(dbName string) error {
 	
 	return nil
 }
+
+// Wishlist handlers - using MongoDB for storage
+
+// commerceWishlistHandler handles GET /api/v1/commerce/wishlist
+func (app *App) commerceWishlistHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	correlationID := GetCorrelationID(ctx)
+	
+	// Get JWT claims
+	claims, ok := GetUserFromContext(ctx)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Get query params
+	storeID := r.URL.Query().Get("storeId")
+	customerID := r.URL.Query().Get("customerId")
+	
+	if storeID == "" || customerID == "" {
+		http.Error(w, "storeId and customerId query parameters are required", http.StatusBadRequest)
+		return
+	}
+
+	log.Info().
+		Str("correlationId", correlationID).
+		Str("tenantId", claims.TenantID).
+		Str("storeId", storeID).
+		Str("customerId", customerID).
+		Msg("Get wishlist request")
+
+	// Get wishlist from MongoDB
+	wishlistCollection := app.mongoClient.Database("amicis").Collection("wishlists")
+	
+	var wishlist models.Wishlist
+	err := wishlistCollection.FindOne(ctx, map[string]interface{}{
+		"tenantId":   claims.TenantID,
+		"storeId":    storeID,
+		"customerId": customerID,
+	}).Decode(&wishlist)
+	
+	if err != nil {
+		// Wishlist doesn't exist yet, return empty
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Correlation-ID", correlationID)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"items": []interface{}{},
+			"count": 0,
+		})
+		return
+	}
+
+	// Return wishlist
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Correlation-ID", correlationID)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"items": wishlist.Items,
+		"count": len(wishlist.Items),
+	})
+}
+
+// commerceAddToWishlistHandler handles POST /api/v1/commerce/wishlist/items
+func (app *App) commerceAddToWishlistHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	correlationID := GetCorrelationID(ctx)
+	
+	// Get JWT claims
+	claims, ok := GetUserFromContext(ctx)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Parse request body
+	var req struct {
+		StoreID    string `json:"storeId"`
+		CustomerID string `json:"customerId"`
+		ProductID  string `json:"productId"`
+	}
+	
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.StoreID == "" || req.CustomerID == "" || req.ProductID == "" {
+		http.Error(w, "storeId, customerId, and productId are required", http.StatusBadRequest)
+		return
+	}
+
+	log.Info().
+		Str("correlationId", correlationID).
+		Str("tenantId", claims.TenantID).
+		Str("storeId", req.StoreID).
+		Str("customerId", req.CustomerID).
+		Str("productId", req.ProductID).
+		Msg("Add to wishlist request")
+
+	// Get product details from commerce API
+	connector, err := app.connectorRegistry.GetConnector(ctx, claims.TenantID, req.StoreID, "retail")
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get retail connector")
+		http.Error(w, fmt.Sprintf("Connector not available: %v", err), http.StatusServiceUnavailable)
+		return
+	}
+
+	retailConnector, ok := connector.(ports.IRetailConnector)
+	if !ok {
+		log.Error().Msg("Connector does not implement IRetailConnector")
+		http.Error(w, "Invalid connector type", http.StatusInternalServerError)
+		return
+	}
+
+	product, err := retailConnector.GetProduct(ctx, req.ProductID)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get product")
+		http.Error(w, fmt.Sprintf("Product not found: %v", err), http.StatusNotFound)
+		return
+	}
+
+	// Create wishlist item
+	item := models.WishlistItem{
+		ID:        fmt.Sprintf("wishlist-item-%s-%d", req.ProductID, time.Now().Unix()),
+		ProductID: req.ProductID,
+		SKU:       product.SKU,
+		Name:      product.Name,
+		Price:     product.Price,
+		AddedAt:   time.Now(),
+	}
+
+	// Update wishlist in MongoDB
+	wishlistCollection := app.mongoClient.Database("amicis").Collection("wishlists")
+	
+	opts := options.Update().SetUpsert(true)
+	_, err = wishlistCollection.UpdateOne(
+		ctx,
+		map[string]interface{}{
+			"tenantId":   claims.TenantID,
+			"storeId":    req.StoreID,
+			"customerId": req.CustomerID,
+		},
+		map[string]interface{}{
+			"$push": map[string]interface{}{"items": item},
+			"$set": map[string]interface{}{
+				"tenantId":   claims.TenantID,
+				"storeId":    req.StoreID,
+				"customerId": req.CustomerID,
+				"updatedAt":  time.Now(),
+			},
+			"$setOnInsert": map[string]interface{}{
+				"createdAt": time.Now(),
+			},
+		},
+		opts,
+	)
+	
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to add item to wishlist")
+		http.Error(w, "Failed to add to wishlist", http.StatusInternalServerError)
+		return
+	}
+
+	// Return success
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Correlation-ID", correlationID)
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"item": item,
+	})
+}
+
+// commerceRemoveFromWishlistHandler handles DELETE /api/v1/commerce/wishlist/items/{itemId}
+func (app *App) commerceRemoveFromWishlistHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	correlationID := GetCorrelationID(ctx)
+	
+	// Get JWT claims
+	claims, ok := GetUserFromContext(ctx)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Get path params and query params
+	itemID := chi.URLParam(r, "itemId")
+	storeID := r.URL.Query().Get("storeId")
+	customerID := r.URL.Query().Get("customerId")
+	
+	if itemID == "" || storeID == "" || customerID == "" {
+		http.Error(w, "itemId, storeId, and customerId are required", http.StatusBadRequest)
+		return
+	}
+
+	log.Info().
+		Str("correlationId", correlationID).
+		Str("tenantId", claims.TenantID).
+		Str("storeId", storeID).
+		Str("customerId", customerID).
+		Str("itemId", itemID).
+		Msg("Remove from wishlist request")
+
+	// Remove item from wishlist in MongoDB
+	wishlistCollection := app.mongoClient.Database("amicis").Collection("wishlists")
+	
+	_, err := wishlistCollection.UpdateOne(
+		ctx,
+		map[string]interface{}{
+			"tenantId":   claims.TenantID,
+			"storeId":    storeID,
+			"customerId": customerID,
+		},
+		map[string]interface{}{
+			"$pull": map[string]interface{}{
+				"items": map[string]interface{}{"id": itemID},
+			},
+			"$set": map[string]interface{}{
+				"updatedAt": time.Now(),
+			},
+		},
+	)
+	
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to remove item from wishlist")
+		http.Error(w, "Failed to remove from wishlist", http.StatusInternalServerError)
+		return
+	}
+
+	// Return success
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Correlation-ID", correlationID)
+	w.WriteHeader(http.StatusNoContent)
+}
+
