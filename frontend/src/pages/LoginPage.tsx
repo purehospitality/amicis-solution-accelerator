@@ -82,9 +82,12 @@ export default function LoginPage() {
         </form>
 
         <div style={{ marginTop: '1.5rem', fontSize: '0.875rem', color: '#666' }}>
-          <p>Demo Credentials:</p>
-          <p>Tenant: <code>ikea</code></p>
-          <p>Token: <code>user-token-123</code></p>
+          <p><strong>Demo Credentials:</strong></p>
+          <p>Tenant ID: <code>ikea</code></p>
+          <p>User Token: <code>test-token-123</code></p>
+          <p style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#999' }}>
+            (Enter these in the fields above)
+          </p>
         </div>
       </div>
     </div>
