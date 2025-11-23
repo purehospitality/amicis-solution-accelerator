@@ -38,7 +38,7 @@ output "acr_login_server" {
 # Cosmos DB outputs
 output "cosmos_endpoint" {
   description = "Cosmos DB endpoint"
-  value       = module.cosmos_db.endpoint
+  value       = module.cosmos_db.cosmos_endpoint
 }
 
 output "cosmos_database_name" {
@@ -49,17 +49,17 @@ output "cosmos_database_name" {
 # Redis outputs
 output "redis_hostname" {
   description = "Redis hostname"
-  value       = module.redis_cache.hostname
+  value       = module.redis_cache.redis_hostname
 }
 
 output "redis_port" {
   description = "Redis SSL port"
-  value       = module.redis_cache.ssl_port
+  value       = module.redis_cache.redis_ssl_port
 }
 
 output "redis_primary_key" {
   description = "Redis primary access key"
-  value       = module.redis_cache.primary_access_key
+  value       = module.redis_cache.redis_primary_access_key
   sensitive   = true
 }
 

@@ -48,6 +48,13 @@ resource "azurerm_subnet" "default" {
   resource_group_name  = azurerm_resource_group.main.name
   virtual_network_name = azurerm_virtual_network.main.name
   address_prefixes     = var.subnet_address_prefixes
+  
+  service_endpoints = [
+    "Microsoft.KeyVault",
+    "Microsoft.Storage",
+    "Microsoft.Sql",
+    "Microsoft.AzureCosmosDB"
+  ]
 }
 
 # Get current Azure client configuration for Key Vault access
@@ -55,7 +62,8 @@ data "azurerm_client_config" "current" {}
 
 # Key Vault
 resource "azurerm_key_vault" "main" {
-  name                       = "kv-${local.name_prefix}-${substr(md5(azurerm_resource_group.main.id), 0, 6)}"
+  # Name must be 3-24 characters, alphanumeric and dashes only
+  name                       = "kv-${substr(replace(local.name_prefix, "_", ""), 0, 15)}-${substr(md5(azurerm_resource_group.main.id), 0, 4)}"
   location                   = azurerm_resource_group.main.location
   resource_group_name        = azurerm_resource_group.main.name
   tenant_id                  = data.azurerm_client_config.current.tenant_id

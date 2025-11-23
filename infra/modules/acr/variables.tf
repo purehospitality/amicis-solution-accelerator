@@ -105,6 +105,12 @@ variable "webhooks" {
   default = {}
 }
 
+variable "enable_defender" {
+  description = "Enable Azure Defender for Container Registries (vulnerability scanning)"
+  type        = bool
+  default     = true
+}
+
 variable "tags" {
   description = "Additional resource tags"
   type        = map(string)

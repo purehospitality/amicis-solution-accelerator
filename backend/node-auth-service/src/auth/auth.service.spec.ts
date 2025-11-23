@@ -5,16 +5,29 @@ import { HttpService } from '@nestjs/axios';
 import { UnauthorizedException, HttpException, HttpStatus } from '@nestjs/common';
 import { of, throwError } from 'rxjs';
 import { AxiosResponse, AxiosError } from 'axios';
-import Redis from 'ioredis';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 
-// Mock Redis
-jest.mock('ioredis');
+// Mock Redis instance
+const mockRedisInstance = {
+  get: jest.fn(),
+  setex: jest.fn(),
+  del: jest.fn(),
+  quit: jest.fn(),
+  on: jest.fn(),
+};
+
+// Mock ioredis module
+jest.mock('ioredis', () => {
+  return {
+    __esModule: true,
+    default: jest.fn(() => mockRedisInstance),
+  };
+});
 
 describe('AuthService', () => {
   let service: AuthService;
   let tenantService: TenantService;
   let httpService: HttpService;
-  let redisMock: jest.Mocked<Redis>;
 
   const mockTenantConfig = {
     tenantId: 'ikea',
@@ -33,16 +46,8 @@ describe('AuthService', () => {
   };
 
   beforeEach(async () => {
-    // Create mock Redis instance
-    redisMock = {
-      get: jest.fn(),
-      setex: jest.fn(),
-      del: jest.fn(),
-      quit: jest.fn(),
-      on: jest.fn(),
-    } as any;
-
-    (Redis as jest.MockedClass<typeof Redis>).mockImplementation(() => redisMock);
+    // Reset all mocks
+    jest.clearAllMocks();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -60,7 +65,7 @@ describe('AuthService', () => {
           },
         },
         {
-          provide: 'WINSTON_MODULE_NEST_PROVIDER',
+          provide: WINSTON_MODULE_NEST_PROVIDER,
           useValue: {
             log: jest.fn(),
             error: jest.fn(),
@@ -97,18 +102,18 @@ describe('AuthService', () => {
         },
       };
 
-      redisMock.get.mockResolvedValue(JSON.stringify(cachedToken));
+      mockRedisInstance.get.mockResolvedValue(JSON.stringify(cachedToken));
 
       const result = await service.exchangeToken('ikea:user-token-123');
 
       expect(result.accessToken).toBe('cached-token');
       expect(result.tenant.id).toBe('ikea');
-      expect(redisMock.get).toHaveBeenCalled();
+      expect(mockRedisInstance.get).toHaveBeenCalled();
       expect(tenantService.getTenantConfig).not.toHaveBeenCalled();
     });
 
     it('should call token endpoint and cache result on cache miss', async () => {
-      redisMock.get.mockResolvedValue(null);
+      mockRedisInstance.get.mockResolvedValue(null);
       jest.spyOn(tenantService, 'getTenantConfig').mockResolvedValue(mockTenantConfig);
 
       const axiosResponse: AxiosResponse = {
@@ -139,11 +144,11 @@ describe('AuthService', () => {
         expect.any(Object),
       );
       
-      expect(redisMock.setex).toHaveBeenCalled();
+      expect(mockRedisInstance.setex).toHaveBeenCalled();
     });
 
     it('should throw UnauthorizedException on 401 response', async () => {
-      redisMock.get.mockResolvedValue(null);
+      mockRedisInstance.get.mockResolvedValue(null);
       jest.spyOn(tenantService, 'getTenantConfig').mockResolvedValue(mockTenantConfig);
 
       const error = {
@@ -161,7 +166,7 @@ describe('AuthService', () => {
     });
 
     it('should throw SERVICE_UNAVAILABLE on connection error', async () => {
-      redisMock.get.mockResolvedValue(null);
+      mockRedisInstance.get.mockResolvedValue(null);
       jest.spyOn(tenantService, 'getTenantConfig').mockResolvedValue(mockTenantConfig);
 
       const error = {
@@ -183,7 +188,7 @@ describe('AuthService', () => {
     });
 
     it('should handle token with colon in actual token part', async () => {
-      redisMock.get.mockResolvedValue(null);
+      mockRedisInstance.get.mockResolvedValue(null);
       jest.spyOn(tenantService, 'getTenantConfig').mockResolvedValue(mockTenantConfig);
 
       const axiosResponse: AxiosResponse = {
@@ -209,8 +214,8 @@ describe('AuthService', () => {
     });
 
     it('should not cache token if caching fails', async () => {
-      redisMock.get.mockResolvedValue(null);
-      redisMock.setex.mockRejectedValue(new Error('Redis error'));
+      mockRedisInstance.get.mockResolvedValue(null);
+      mockRedisInstance.setex.mockRejectedValue(new Error('Redis error'));
       
       jest.spyOn(tenantService, 'getTenantConfig').mockResolvedValue(mockTenantConfig);
 
@@ -240,7 +245,7 @@ describe('AuthService', () => {
         },
       };
 
-      redisMock.get.mockResolvedValue(JSON.stringify(expiredToken));
+      mockRedisInstance.get.mockResolvedValue(JSON.stringify(expiredToken));
       jest.spyOn(tenantService, 'getTenantConfig').mockResolvedValue(mockTenantConfig);
 
       const axiosResponse: AxiosResponse = {
@@ -257,14 +262,14 @@ describe('AuthService', () => {
 
       // Should get fresh token, not expired cached one
       expect(result.accessToken).toBe('backend-access-token-xyz');
-      expect(redisMock.del).toHaveBeenCalled();
+      expect(mockRedisInstance.del).toHaveBeenCalled();
     });
   });
 
   describe('onModuleDestroy', () => {
     it('should close Redis connection on module destroy', async () => {
       await service.onModuleDestroy();
-      expect(redisMock.quit).toHaveBeenCalled();
+      expect(mockRedisInstance.quit).toHaveBeenCalled();
     });
   });
 });

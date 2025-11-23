@@ -25,8 +25,34 @@ type JWTClaims struct {
 type contextKey string
 
 const (
-	UserContextKey contextKey = "user"
+	UserContextKey          contextKey = "user"
+	CorrelationIDContextKey contextKey = "correlationId"
 )
+
+const (
+	CorrelationIDHeader = "X-Correlation-ID"
+	RequestIDHeader     = "X-Request-ID"
+)
+
+// CORSMiddleware adds CORS headers to allow requests from the frontend
+func CORSMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set CORS headers
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, X-CSRF-Token, X-Request-ID, X-Correlation-ID")
+		w.Header().Set("Access-Control-Expose-Headers", "X-Request-ID, X-Correlation-ID")
+		w.Header().Set("Access-Control-Max-Age", "3600")
+
+		// Handle preflight requests
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
 
 // JWTMiddleware validates JWT tokens on incoming requests
 func JWTMiddleware(next http.Handler) http.Handler {
@@ -116,6 +142,14 @@ func JWTMiddleware(next http.Handler) http.Handler {
 func GetUserFromContext(ctx context.Context) (*JWTClaims, bool) {
 	user, ok := ctx.Value(UserContextKey).(*JWTClaims)
 	return user, ok
+}
+
+// GetCorrelationID extracts correlation ID from request context
+func GetCorrelationID(ctx context.Context) string {
+	if id, ok := ctx.Value(CorrelationIDContextKey).(string); ok {
+		return id
+	}
+	return ""
 }
 
 // PublicEndpoint marks routes that don't require authentication

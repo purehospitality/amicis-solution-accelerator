@@ -4,6 +4,7 @@ import { TenantService } from './tenant.service';
 import { HttpService } from '@nestjs/axios';
 import { catchError, firstValueFrom, timeout } from 'rxjs';
 import Redis from 'ioredis';
+import * as jwt from 'jsonwebtoken';
 
 interface CachedToken {
   accessToken: string;
@@ -30,6 +31,7 @@ export class AuthService {
       host: process.env.REDIS_HOST || 'localhost',
       port: parseInt(process.env.REDIS_PORT || '6379'),
       password: process.env.REDIS_PASSWORD,
+      tls: process.env.REDIS_PORT === '6380' ? {} : undefined,
       retryStrategy: (times) => {
         const delay = Math.min(times * 50, 2000);
         return delay;
@@ -137,6 +139,37 @@ export class AuthService {
     userToken: string,
     scope?: string
   ): Promise<{ access_token: string; expires_in: number; token_type?: string }> {
+    // Development/Demo Mode: Bypass external token validation
+    // For demo purposes, accept any token and generate a proper JWT
+    const isDemoMode = process.env.DEMO_MODE === 'true' || process.env.NODE_ENV === 'development';
+    
+    if (isDemoMode) {
+      this.logger.log(`Demo mode: Bypassing external token validation for ${clientId}`, 'AuthService');
+      
+      // Extract tenant ID from client ID (e.g., "ikea-mobile-app" -> "ikea")
+      const tenantId = clientId.split('-')[0];
+      
+      // Get JWT secret from environment or use default
+      const jwtSecret = process.env.JWT_SECRET || 'development-secret-change-in-production';
+      
+      // Generate a proper JWT token
+      const payload = {
+        sub: userToken,
+        tenantId: tenantId,
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+      
+      const accessToken = jwt.sign(payload, jwtSecret, { algorithm: 'HS256' });
+      
+      return {
+        access_token: accessToken,
+        expires_in: 3600,
+        token_type: 'Bearer',
+      };
+    }
+
+    // Production Mode: Call actual retailer token endpoint
     const requestBody = {
       grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
       client_id: clientId,

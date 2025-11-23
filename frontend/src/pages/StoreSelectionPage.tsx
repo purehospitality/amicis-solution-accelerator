@@ -9,16 +9,9 @@ interface Store {
   backendUrl: string;
 }
 
-// Mock stores - in production, this would come from an API
-const mockStores: Store[] = [
-  { storeId: 'IKEA001', name: 'IKEA Stockholm', backendUrl: 'https://ikea-backend.example.com' },
-  { storeId: 'IKEA002', name: 'IKEA Gothenburg', backendUrl: 'https://ikea-backend.example.com' },
-  { storeId: 'IKEA003', name: 'IKEA Malmo', backendUrl: 'https://ikea-backend.example.com' },
-];
-
 export default function StoreSelectionPage() {
-  const [stores] = useState<Store[]>(mockStores);
-  const [loading, setLoading] = useState(false);
+  const [stores, setStores] = useState<Store[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const { tenant, logout } = useAuthStore();
@@ -29,6 +22,22 @@ export default function StoreSelectionPage() {
     if (accessToken) {
       apiClient.setAuthToken(accessToken);
     }
+
+    // Fetch stores from API
+    const fetchStores = async () => {
+      try {
+        setLoading(true);
+        const storeList = await apiClient.getStores();
+        setStores(storeList);
+      } catch (err: any) {
+        console.error('Failed to fetch stores:', err);
+        setError('Failed to load stores. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStores();
   }, []);
 
   const handleStoreSelect = async (store: Store) => {
@@ -74,7 +83,16 @@ export default function StoreSelectionPage() {
 
         {error && <div className="error" style={{ marginBottom: '1rem' }}>{error}</div>}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '2rem' }}>
+            <p>Loading stores...</p>
+          </div>
+        ) : stores.length === 0 ? (
+          <div className="card" style={{ textAlign: 'center', padding: '2rem' }}>
+            <p>No stores available</p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {stores.map((store) => (
             <div
               key={store.storeId}
@@ -91,11 +109,6 @@ export default function StoreSelectionPage() {
               </p>
             </div>
           ))}
-        </div>
-
-        {loading && (
-          <div className="loading">
-            <p>Loading store information...</p>
           </div>
         )}
       </div>

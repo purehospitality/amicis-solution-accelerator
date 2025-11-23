@@ -100,6 +100,7 @@ export class ApplicationInsightsService implements OnModuleInit {
         data: commandName,
         duration,
         success,
+        resultCode: success ? 200 : 500,
         dependencyTypeName: dependencyTypeName || 'HTTP',
       });
     }
@@ -114,7 +115,7 @@ export class ApplicationInsightsService implements OnModuleInit {
         name,
         url,
         duration,
-        responseCode,
+        resultCode: responseCode,
         success,
       });
     }

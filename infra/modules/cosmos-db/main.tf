@@ -30,7 +30,7 @@ resource "azurerm_cosmosdb_account" "main" {
   location            = var.location
   resource_group_name = var.resource_group_name
   offer_type          = "Standard"
-  kind                = "GlobalDocumentDB"
+  kind                = "MongoDB"
 
   enable_free_tier            = var.enable_free_tier
   enable_automatic_failover   = var.enable_automatic_failover
@@ -48,14 +48,18 @@ resource "azurerm_cosmosdb_account" "main" {
   }
 
   capabilities {
+    name = "EnableMongo"
+  }
+  
+  capabilities {
     name = "EnableServerless"
   }
 
   tags = local.common_tags
 }
 
-# Cosmos DB Databases
-resource "azurerm_cosmosdb_sql_database" "databases" {
+# Cosmos DB MongoDB Databases
+resource "azurerm_cosmosdb_mongo_database" "databases" {
   for_each = var.databases
 
   name                = each.key
@@ -64,8 +68,8 @@ resource "azurerm_cosmosdb_sql_database" "databases" {
   throughput          = each.value.throughput
 }
 
-# Cosmos DB Containers
-resource "azurerm_cosmosdb_sql_container" "containers" {
+# Cosmos DB MongoDB Collections
+resource "azurerm_cosmosdb_mongo_collection" "containers" {
   for_each = merge([
     for db_name, db in var.databases : {
       for container_name, container in db.containers :
@@ -75,29 +79,21 @@ resource "azurerm_cosmosdb_sql_container" "containers" {
         partition_key_path = container.partition_key_path
         throughput         = container.throughput
         default_ttl        = container.default_ttl
-        indexing_mode      = container.indexing_mode
       }
     }
   ]...)
 
-  name                  = each.value.container_name
-  resource_group_name   = var.resource_group_name
-  account_name          = azurerm_cosmosdb_account.main.name
-  database_name         = azurerm_cosmosdb_sql_database.databases[each.value.database_name].name
-  partition_key_paths   = [each.value.partition_key_path]
-  partition_key_version = 2
-  throughput            = each.value.throughput
-  default_ttl           = each.value.default_ttl
-
-  indexing_policy {
-    indexing_mode = each.value.indexing_mode
-
-    included_path {
-      path = "/*"
-    }
-
-    excluded_path {
-      path = "/\"_etag\"/?"
-    }
+  name                = each.value.container_name
+  resource_group_name = var.resource_group_name
+  account_name        = azurerm_cosmosdb_account.main.name
+  database_name       = azurerm_cosmosdb_mongo_database.databases[each.value.database_name].name
+  throughput          = each.value.throughput
+  default_ttl_seconds = each.value.default_ttl
+  
+  shard_key = trimprefix(each.value.partition_key_path, "/")
+  
+  index {
+    keys   = ["_id"]
+    unique = true
   }
 }

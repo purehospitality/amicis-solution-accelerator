@@ -47,6 +47,11 @@ class ApiClient {
     return response.data;
   }
 
+  async getStores() {
+    const response = await this.routingApi.get('/api/v1/stores');
+    return response.data;
+  }
+
   // Health checks
   async checkAuthHealth() {
     const response = await this.authApi.get('/health');

@@ -1,5 +1,7 @@
-import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, Req, Inject, LoggerService } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
+import { Request } from 'express';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { AuthService } from './auth.service';
 import { TokenExchangeDto } from './dto/token-exchange.dto';
 import { Public } from './decorators/public.decorator';
@@ -7,7 +9,10 @@ import { Public } from './decorators/public.decorator';
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    @Inject(WINSTON_MODULE_NEST_PROVIDER) private readonly logger: LoggerService,
+  ) {}
 
   @Public()
   @Post('exchange')
@@ -37,7 +42,21 @@ export class AuthController {
   })
   @ApiResponse({ status: 401, description: 'Invalid token format' })
   @ApiResponse({ status: 404, description: 'Tenant not found' })
-  async exchangeToken(@Body() tokenExchangeDto: TokenExchangeDto) {
-    return this.authService.exchangeToken(tokenExchangeDto.userToken);
+  async exchangeToken(@Body() dto: TokenExchangeDto, @Req() req: Request) {
+    const correlationId = req.correlationId || 'unknown';
+    
+    this.logger.log(
+      `Token exchange request received`,
+      { correlationId, context: 'AuthController' },
+    );
+    
+    const result = await this.authService.exchangeToken(dto.userToken);
+    
+    this.logger.log(
+      `Token exchange successful`,
+      { correlationId, tenantId: result.tenant.id, context: 'AuthController' },
+    );
+    
+    return result;
   }
 }

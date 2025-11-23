@@ -41,7 +41,7 @@ resource "azurerm_kubernetes_cluster" "main" {
     min_count           = var.system_node_pool_config.enable_auto_scaling ? var.system_node_pool_config.min_count : null
     max_count           = var.system_node_pool_config.enable_auto_scaling ? var.system_node_pool_config.max_count : null
     vnet_subnet_id      = var.subnet_id
-    zones               = var.availability_zones
+    zones               = length(var.availability_zones) > 0 ? var.availability_zones : null
     
     upgrade_settings {
       max_surge = "10%"

@@ -70,9 +70,9 @@ variable "user_node_pools" {
 }
 
 variable "availability_zones" {
-  description = "Availability zones for node pools"
+  description = "Availability zones for node pools (empty array for no zones)"
   type        = list(string)
-  default     = ["1", "2", "3"]
+  default     = []
 }
 
 variable "dns_service_ip" {

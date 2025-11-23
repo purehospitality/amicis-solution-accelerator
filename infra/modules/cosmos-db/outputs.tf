@@ -27,10 +27,10 @@ output "cosmos_connection_strings" {
 
 output "database_names" {
   description = "Names of the created databases"
-  value       = [for db in azurerm_cosmosdb_sql_database.databases : db.name]
+  value       = [for db in azurerm_cosmosdb_mongo_database.databases : db.name]
 }
 
 output "container_names" {
   description = "Names of the created containers"
-  value       = [for container in azurerm_cosmosdb_sql_container.containers : container.name]
+  value       = [for container in azurerm_cosmosdb_mongo_collection.containers : container.name]
 }

@@ -8,6 +8,7 @@ data:
   NODE_ENV: "production"
   LOG_LEVEL: "info"
   COSMOS_DATABASE: "amicis"
+  DEMO_MODE: "true"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -28,10 +29,24 @@ spec:
         app: node-auth-service
         version: v1
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: auth-service
-        image: acramicisikeadev.azurecr.io/node-auth-service:latest
+        image: acramicisikeadev.azurecr.io/node-auth-service:v1.0.7
         imagePullPolicy: Always
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+          runAsNonRoot: true
+          runAsUser: 1000
         ports:
         - containerPort: 3000
           name: http
@@ -62,6 +77,30 @@ spec:
             configMapKeyRef:
               name: node-auth-service-config
               key: COSMOS_DATABASE
+        - name: DEMO_MODE
+          valueFrom:
+            configMapKeyRef:
+              name: node-auth-service-config
+              key: DEMO_MODE
+        - name: REDIS_HOST
+          value: "redis-amicis-ikea-dev.redis.cache.windows.net"
+        - name: REDIS_PORT
+          value: "6380"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-connection
+              key: password
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: jwt-secret
+              key: secret
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: cache
+          mountPath: /home/node/.npm
         resources:
           requests:
             cpu: 100m
@@ -81,10 +120,15 @@ spec:
           httpGet:
             path: /health
             port: 3000
-          initialDelaySeconds: 10
+          initialDelaySeconds: 5
           periodSeconds: 5
           timeoutSeconds: 3
           failureThreshold: 3
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: cache
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

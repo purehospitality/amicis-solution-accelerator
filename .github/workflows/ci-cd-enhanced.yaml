@@ -43,6 +43,20 @@ jobs:
     - name: Build
       run: go build -v -o bin/routing-service .
     
+    - name: Run Trivy vulnerability scanner on code
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+    
+    - name: Upload Trivy results to GitHub Security
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+    
     - name: Login to Azure
       if: github.ref == 'refs/heads/main'
       uses: azure/login@v1
@@ -61,6 +75,20 @@ jobs:
                      -t ${{ env.REGISTRY_NAME }}.azurecr.io/go-routing-service:latest .
         docker push ${{ env.REGISTRY_NAME }}.azurecr.io/go-routing-service:${{ github.sha }}
         docker push ${{ env.REGISTRY_NAME }}.azurecr.io/go-routing-service:latest
+    
+    - name: Scan Docker image with Trivy
+      if: github.ref == 'refs/heads/main'
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: '${{ env.REGISTRY_NAME }}.azurecr.io/go-routing-service:${{ github.sha }}'
+        format: 'sarif'
+        output: 'trivy-image-results.sarif'
+    
+    - name: Upload image scan results
+      if: github.ref == 'refs/heads/main'
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: 'trivy-image-results.sarif'
 
   # Build and test Node auth service
   build-node-service:
@@ -116,6 +144,20 @@ jobs:
                      -t ${{ env.REGISTRY_NAME }}.azurecr.io/node-auth-service:latest .
         docker push ${{ env.REGISTRY_NAME }}.azurecr.io/node-auth-service:${{ github.sha }}
         docker push ${{ env.REGISTRY_NAME }}.azurecr.io/node-auth-service:latest
+    
+    - name: Scan Docker image with Trivy
+      if: github.ref == 'refs/heads/main'
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: '${{ env.REGISTRY_NAME }}.azurecr.io/node-auth-service:${{ github.sha }}'
+        format: 'sarif'
+        output: 'trivy-image-results.sarif'
+    
+    - name: Upload image scan results
+      if: github.ref == 'refs/heads/main'
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: 'trivy-image-results.sarif'
 
   # Build frontend
   build-frontend:

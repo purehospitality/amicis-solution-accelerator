@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
@@ -18,12 +18,18 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o routing-service .
 # Runtime stage
 FROM alpine:latest
 
-RUN apk --no-cache add ca-certificates
+# Create non-root user
+RUN apk --no-cache add ca-certificates && \
+    addgroup -g 1000 appuser && \
+    adduser -D -u 1000 -G appuser appuser
 
-WORKDIR /root/
+WORKDIR /app
 
 # Copy binary from builder
-COPY --from=builder /app/routing-service .
+COPY --from=builder --chown=appuser:appuser /app/routing-service .
+
+# Switch to non-root user
+USER appuser
 
 # Expose port
 EXPOSE 8080

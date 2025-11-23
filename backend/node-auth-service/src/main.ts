@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { createLogger } from './common/logger.config';
+import { CorrelationIdMiddleware } from './common/correlation-id.middleware';
 
 async function bootstrap() {
   const logger = createLogger();
@@ -13,6 +14,9 @@ async function bootstrap() {
   
   // Enable CORS for mobile apps
   app.enableCors();
+
+  // Apply correlation ID middleware globally
+  app.use(new CorrelationIdMiddleware().use.bind(new CorrelationIdMiddleware()));
 
   // Enable global validation
   app.useGlobalPipes(

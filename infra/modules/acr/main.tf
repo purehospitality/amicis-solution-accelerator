@@ -69,20 +69,35 @@ resource "azurerm_container_registry" "main" {
     }
   }
 
-  # Content trust and vulnerability scanning
-  trust_policy {
-    enabled = var.enable_content_trust
+  # Content trust (Premium only)
+  dynamic "trust_policy" {
+    for_each = var.sku == "Premium" ? [1] : []
+    content {
+      enabled = var.enable_content_trust
+    }
   }
 
-  retention_policy {
-    days    = var.retention_days
-    enabled = var.retention_days > 0
+  # Retention policy (Premium only)
+  dynamic "retention_policy" {
+    for_each = var.sku == "Premium" && var.retention_days > 0 ? [1] : []
+    content {
+      days    = var.retention_days
+      enabled = true
+    }
   }
 
   # Export policy (for compliance)
   export_policy_enabled = var.export_policy_enabled
 
   tags = local.common_tags
+}
+
+# Enable Azure Defender for Container Registries
+resource "azurerm_security_center_subscription_pricing" "acr_defender" {
+  count = var.enable_defender ? 1 : 0
+
+  tier          = "Standard"
+  resource_type = "ContainerRegistry"
 }
 
 # Diagnostic settings for monitoring

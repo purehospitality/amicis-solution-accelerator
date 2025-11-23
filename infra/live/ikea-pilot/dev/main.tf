@@ -1,23 +1,3 @@
-terraform {
-  required_version = ">= 1.5.0"
-  
-  required_providers {
-    azurerm = {
-      source  = "hashicorp/azurerm"
-      version = "~> 3.0"
-    }
-  }
-}
-
-provider "azurerm" {
-  features {
-    key_vault {
-      purge_soft_delete_on_destroy = true
-      recover_soft_deleted_key_vaults = true
-    }
-  }
-}
-
 # Foundation: Resource Group, VNet, Key Vault
 module "foundation" {
   source = "../../../modules/foundation"
@@ -158,25 +138,19 @@ module "aks" {
   log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
   acr_id                     = module.acr.registry_id
 
-  kubernetes_version = "1.28"
+  kubernetes_version = "1.31"
 
+  # Scaled up for running multiple services
   system_node_pool_config = {
     node_count          = 2
-    vm_size             = "Standard_D2s_v3"
-    enable_auto_scaling = true
+    vm_size             = "Standard_DS2_v2"  # 2 vCPU, 7 GB RAM - better for production workloads
+    enable_auto_scaling = false
     min_count           = 2
     max_count           = 3
   }
 
-  user_node_pools = {
-    apps = {
-      vm_size             = "Standard_D2s_v3"
-      node_count          = 2
-      enable_auto_scaling = true
-      min_count           = 2
-      max_count           = 5
-    }
-  }
+  # No user node pools for dev - run everything on system pool
+  user_node_pools = {}
 
   automatic_channel_upgrade = "stable"
 

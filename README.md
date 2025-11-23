@@ -48,6 +48,15 @@ amicis-solution-accelerator/
 - **Azure CLI**: Latest version
 - **Docker**: For containerization
 - **kubectl**: For Kubernetes management
+- **k6**: For performance testing (optional)
+
+### Quick Links
+
+- 📖 [Setup Guide](docs/SETUP.md) - Initial Azure setup and configuration
+- 🏠 [Local Development](docs/LOCAL_DEVELOPMENT.md) - Running services locally
+- ☸️ [K8s Deployment](docs/K8S_DEPLOYMENT.md) - Kubernetes deployment guide
+- 📊 [Monitoring](docs/MONITORING.md) - Application Insights and observability
+- ⚡ [Performance Testing](docs/PERFORMANCE.md) - Load testing and benchmarks
 
 ### Infrastructure Setup
 

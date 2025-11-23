@@ -1,0 +1,132 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: node-auth-service-netpol
+  namespace: amicis
+spec:
+  podSelector:
+    matchLabels:
+      app: node-auth-service
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 3000
+  # Allow traffic from routing service (for potential inter-service calls)
+  - from:
+    - podSelector:
+        matchLabels:
+          app: go-routing-service
+    ports:
+    - protocol: TCP
+      port: 3000
+  egress:
+  # Allow DNS
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+  # Allow Cosmos DB (Azure MongoDB API)
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 10255
+    - protocol: TCP
+      port: 443
+  # Allow Redis
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 6379
+    - protocol: TCP
+      port: 6380
+  # Allow Application Insights (HTTPS)
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: go-routing-service-netpol
+  namespace: amicis
+spec:
+  podSelector:
+    matchLabels:
+      app: go-routing-service
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8080
+  # Allow traffic from auth service
+  - from:
+    - podSelector:
+        matchLabels:
+          app: node-auth-service
+    ports:
+    - protocol: TCP
+      port: 8080
+  egress:
+  # Allow DNS
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+  # Allow Cosmos DB
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 10255
+    - protocol: TCP
+      port: 443
+  # Allow Redis
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 6379
+    - protocol: TCP
+      port: 6380
+  # Allow HTTPS for external APIs
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: amicis
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress

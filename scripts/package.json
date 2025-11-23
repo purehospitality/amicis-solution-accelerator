@@ -1,5 +1,6 @@
 {
   "dependencies": {
-    "mongodb": "^7.0.0"
+    "@azure/cosmos": "^4.8.0",
+    "mongodb": "^3.6.0"
   }
 }

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Amicis Login Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        .success { color: green; background: #e8f5e9; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .error { color: red; background: #ffebee; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .info { color: #0066cc; background: #e3f2fd; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        pre { background: #f5f5f5; padding: 15px; overflow: auto; border-radius: 5px; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #0066cc; color: white; border: none; border-radius: 5px; }
+        button:hover { background: #0052a3; }
+        input { padding: 8px; width: 200px; margin: 5px; }
+        label { display: inline-block; width: 100px; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Amicis Login Test</h1>
+    
+    <div class="info">
+        <strong>Testing Frontend Login to:</strong> http://api.4.157.44.54.nip.io/auth/exchange
+    </div>
+
+    <div style="margin: 20px 0;">
+        <div><label>Tenant ID:</label><input type="text" id="tenantId" value="ikea"></div>
+        <div><label>User Token:</label><input type="text" id="userToken" value="user-token-123"></div>
+        <div><label></label><button onclick="testLogin()">Test Login</button></div>
+    </div>
+
+    <div id="status"></div>
+    <div id="result"></div>
+
+    <h2>Deployment Info</h2>
+    <div class="info">
+        <strong>Frontend URL:</strong> https://gray-cliff-0abcbae0f.3.azurestaticapps.net<br>
+        <strong>Backend URL:</strong> http://api.4.157.44.54.nip.io<br>
+        <strong>CORS Enabled:</strong> Yes (Access-Control-Allow-Origin: *)
+    </div>
+
+    <script>
+        async function testLogin() {
+            const tenantId = document.getElementById('tenantId').value;
+            const userToken = document.getElementById('userToken').value;
+            const statusDiv = document.getElementById('status');
+            const resultDiv = document.getElementById('result');
+            
+            statusDiv.innerHTML = '<div class="info">🔄 Testing login...</div>';
+            resultDiv.innerHTML = '';
+
+            try {
+                const requestBody = {
+                    userToken: `${tenantId}:${userToken}`
+                };
+
+                console.log('Request:', requestBody);
+                statusDiv.innerHTML += '<pre>Request Body:\n' + JSON.stringify(requestBody, null, 2) + '</pre>';
+
+                const response = await fetch('http://api.4.157.44.54.nip.io/auth/exchange', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                statusDiv.innerHTML += `<div class="info">Response Status: ${response.status} ${response.statusText}</div>`;
+
+                const data = await response.json();
+                console.log('Response:', data);
+
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            <h3>✅ Login Successful!</h3>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                            <p><strong>Access Token:</strong> ${data.accessToken.substring(0, 50)}...</p>
+                            <p><strong>Tenant:</strong> ${data.tenant.name} (${data.tenant.id})</p>
+                            <p><strong>Expires In:</strong> ${data.expiresIn} seconds</p>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            <h3>❌ Login Failed</h3>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h3>❌ Request Failed</h3>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <p>This might be a CORS issue or network error.</p>
+                        <p>Check the browser console (F12) for more details.</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Auto-test on page load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                document.getElementById('status').innerHTML = '<div class="info">Click "Test Login" button to test authentication</div>';
+            }, 500);
+        });
+    </script>
+</body>
+</html>
