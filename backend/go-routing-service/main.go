@@ -51,15 +51,17 @@ type RedisClient interface {
 
 // HealthResponse represents the health check response
 type HealthResponse struct {
-	Status       string            `json:"status"`
-	Dependencies map[string]string `json:"dependencies"`
+	Status          string                 `json:"status"`
+	Dependencies    map[string]string      `json:"dependencies"`
+	CircuitBreakers map[string]interface{} `json:"circuitBreakers,omitempty"`
 }
 
 // App holds the application dependencies
 type App struct {
-	mongoClient *mongo.Client
-	redisClient RedisClient
-	storesDB    *mongo.Collection
+	mongoClient     *mongo.Client
+	redisClient     RedisClient
+	storesDB        *mongo.Collection
+	circuitBreakers *CircuitBreakerWrapper
 }
 
 // Prometheus metrics
@@ -169,9 +171,10 @@ func main() {
 
 	// Create app instance with dependencies
 	app := &App{
-		mongoClient: mongoClient,
-		redisClient: redisClient,
-		storesDB:    mongoClient.Database(dbName).Collection("stores"),
+		mongoClient:     mongoClient,
+		redisClient:     redisClient,
+		storesDB:        mongoClient.Database(dbName).Collection("stores"),
+		circuitBreakers: NewCircuitBreakerWrapper(),
 	}
 	
 	// Initialize rate limiter (100 requests per second, burst of 200)
@@ -254,8 +257,9 @@ func (app *App) healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(statusCode)
 	
 	response := HealthResponse{
-		Status:       status,
-		Dependencies: dependencies,
+		Status:          status,
+		Dependencies:    dependencies,
+		CircuitBreakers: app.circuitBreakers.GetCircuitBreakerStats(),
 	}
 	
 	json.NewEncoder(w).Encode(response)
@@ -284,11 +288,26 @@ func (app *App) routeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Try Redis cache first
+	// Try Redis cache first with circuit breaker
 	cacheKey := "store:" + storeID
-	cachedData, err := app.redisClient.Get(ctx, cacheKey).Result()
+	var cachedData string
+	var cacheErr error
 	
-	if err == nil {
+	result, err := app.circuitBreakers.ExecuteWithBreaker(
+		app.circuitBreakers.RedisBreaker,
+		func() (interface{}, error) {
+			return app.redisClient.Get(ctx, cacheKey).Result()
+		},
+	)
+	
+	if err == nil && result != nil {
+		cachedData = result.(string)
+		cacheErr = nil
+	} else {
+		cacheErr = err
+	}
+	
+	if cacheErr == nil {
 		// Cache hit - return cached data
 		cacheHitsTotal.Inc()
 		var response RouteResponse
@@ -305,7 +324,7 @@ func (app *App) routeHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Cache miss - query MongoDB
+	// Cache miss - query MongoDB with circuit breaker
 	cacheMissesTotal.Inc()
 	dbQueriesTotal.WithLabelValues("stores", "findOne").Inc()
 	log.Info().
@@ -315,7 +334,15 @@ func (app *App) routeHandler(w http.ResponseWriter, r *http.Request) {
 	
 	var store Store
 	filter := bson.M{"storeId": storeID}
-	err = app.storesDB.FindOne(ctx, filter).Decode(&store)
+	
+	dbResult, err := app.circuitBreakers.ExecuteWithBreaker(
+		app.circuitBreakers.MongoBreaker,
+		func() (interface{}, error) {
+			var s Store
+			err := app.storesDB.FindOne(ctx, filter).Decode(&s)
+			return s, err
+		},
+	)
 	
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -329,11 +356,13 @@ func (app *App) routeHandler(w http.ResponseWriter, r *http.Request) {
 				Err(err).
 				Str("correlationId", correlationID).
 				Str("storeId", storeID).
-				Msg("Database error")
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+				Msg("Database error or circuit breaker open")
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		}
 		return
 	}
+	
+	store = dbResult.(Store)
 
 	// Build response
 	response := RouteResponse{
@@ -342,9 +371,14 @@ func (app *App) routeHandler(w http.ResponseWriter, r *http.Request) {
 		BackendContext: store.BackendContext,
 	}
 
-	// Cache the result in Redis (TTL: 1 hour)
+	// Cache the result in Redis (TTL: 1 hour) - with circuit breaker
 	responseJSON, _ := json.Marshal(response)
-	app.redisClient.Set(ctx, cacheKey, responseJSON, 1*time.Hour)
+	_, _ = app.circuitBreakers.ExecuteWithBreaker(
+		app.circuitBreakers.RedisBreaker,
+		func() (interface{}, error) {
+			return nil, app.redisClient.Set(ctx, cacheKey, responseJSON, 1*time.Hour).Err()
+		},
+	)
 
 	log.Info().
 		Str("correlationId", correlationID).
@@ -387,29 +421,36 @@ func (app *App) storesListHandler(w http.ResponseWriter, r *http.Request) {
 		filter["tenantId"] = tenantID
 	}
 
-	// Query MongoDB for stores
+	// Query MongoDB for stores with circuit breaker
 	dbQueriesTotal.WithLabelValues("stores", "find").Inc()
-	cursor, err := app.storesDB.Find(ctx, filter)
+	
+	result, err := app.circuitBreakers.ExecuteWithBreaker(
+		app.circuitBreakers.MongoBreaker,
+		func() (interface{}, error) {
+			cursor, err := app.storesDB.Find(ctx, filter)
+			if err != nil {
+				return nil, err
+			}
+			defer cursor.Close(ctx)
+
+			var stores []Store
+			if err := cursor.All(ctx, &stores); err != nil {
+				return nil, err
+			}
+			return stores, nil
+		},
+	)
+	
 	if err != nil {
 		log.Error().
 			Err(err).
 			Str("correlationId", correlationID).
-			Msg("Failed to query stores")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+			Msg("Failed to query stores or circuit breaker open")
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
-	defer cursor.Close(ctx)
-
-	// Decode stores
-	var stores []Store
-	if err := cursor.All(ctx, &stores); err != nil {
-		log.Error().
-			Err(err).
-			Str("correlationId", correlationID).
-			Msg("Failed to decode stores")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
+	
+	stores := result.([]Store)
 
 	// Build response with minimal data
 	storeList := make([]StoreListItem, 0, len(stores))

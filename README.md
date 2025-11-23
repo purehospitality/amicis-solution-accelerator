@@ -57,6 +57,8 @@ amicis-solution-accelerator/
 - ☸️ [K8s Deployment](docs/K8S_DEPLOYMENT.md) - Kubernetes deployment guide
 - 📊 [Monitoring](docs/MONITORING.md) - Application Insights and observability
 - ⚡ [Performance Testing](docs/PERFORMANCE.md) - Load testing and benchmarks
+- 🔄 [Resilience](docs/RESILIENCE.md) - Circuit breakers, retries, and fault tolerance
+- 🧪 [Circuit Breaker Testing](docs/CIRCUIT_BREAKER_TESTING.md) - Testing resilience patterns
 
 ### Infrastructure Setup
 
@@ -127,6 +129,7 @@ npm run build
 - **Backend**: Go (Chi router), Node.js (NestJS)
 - **Frontend**: React, Capacitor (iOS/Android)
 - **Data**: Azure Cosmos DB, Azure Cache for Redis
+- **Resilience**: Circuit Breakers (gobreaker, opossum), Exponential Backoff Retries
 - **CI/CD**: GitHub Actions, Azure DevOps
 
 ## 🏢 Multi-Tenancy

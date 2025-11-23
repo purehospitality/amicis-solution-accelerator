@@ -5,6 +5,7 @@ import { HttpService } from '@nestjs/axios';
 import { catchError, firstValueFrom, timeout } from 'rxjs';
 import Redis from 'ioredis';
 import * as jwt from 'jsonwebtoken';
+import { CircuitBreakerService } from '../common/circuit-breaker.service';
 
 interface CachedToken {
   accessToken: string;
@@ -24,6 +25,7 @@ export class AuthService {
   constructor(
     private readonly tenantService: TenantService,
     private readonly httpService: HttpService,
+    private readonly circuitBreaker: CircuitBreakerService,
     @Inject(WINSTON_MODULE_NEST_PROVIDER) private readonly logger: LoggerService
   ) {
     // Initialize Redis client
@@ -79,13 +81,34 @@ export class AuthService {
     const tenantConfig = await this.tenantService.getTenantConfig(tenantId);
     this.logger.log(`Retrieved config for tenant: ${tenantConfig.name}`, 'AuthService');
 
-    // Call retailer's token endpoint
+    // Call retailer's token endpoint with circuit breaker protection
     try {
-      const tokenResponse = await this.callTokenEndpoint(
-        tenantConfig.authConfig.tokenEndpoint,
-        tenantConfig.authConfig.clientId,
-        actualToken,
-        tenantConfig.authConfig.scope
+      const tokenResponse = await this.circuitBreaker.executeWithFallback(
+        `token-exchange-${tenantId}`,
+        async () => {
+          return await this.callTokenEndpoint(
+            tenantConfig.authConfig.tokenEndpoint,
+            tenantConfig.authConfig.clientId,
+            actualToken,
+            tenantConfig.authConfig.scope
+          );
+        },
+        (error) => {
+          this.logger.warn(
+            `Circuit breaker fallback triggered for tenant: ${tenantId}`,
+            'AuthService'
+          );
+          // Fallback: throw error to inform client service is unavailable
+          throw new HttpException(
+            'Authentication service temporarily unavailable',
+            HttpStatus.SERVICE_UNAVAILABLE
+          );
+        },
+        {
+          timeout: 5000, // 5 second timeout
+          errorThresholdPercentage: 50, // Open after 50% failures
+          resetTimeout: 30000, // Try again after 30 seconds
+        }
       );
 
       const result = {

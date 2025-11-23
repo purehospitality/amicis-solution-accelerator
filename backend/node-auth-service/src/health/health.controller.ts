@@ -1,6 +1,7 @@
 import { Controller, Get, HttpStatus, HttpException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { DatabaseService } from '../database/database.service';
+import { CircuitBreakerService } from '../common/circuit-breaker.service';
 import { Public } from '../auth/decorators/public.decorator';
 import Redis from 'ioredis';
 
@@ -11,6 +12,7 @@ interface HealthCheckResult {
     mongodb: { status: 'up' | 'down'; responseTime?: number; error?: string };
     redis: { status: 'up' | 'down'; responseTime?: number; error?: string };
   };
+  circuitBreakers?: Record<string, any>;
 }
 
 @ApiTags('health')
@@ -18,7 +20,10 @@ interface HealthCheckResult {
 export class HealthController {
   private readonly redis: Redis;
 
-  constructor(private readonly databaseService: DatabaseService) {
+  constructor(
+    private readonly databaseService: DatabaseService,
+    private readonly circuitBreaker: CircuitBreakerService,
+  ) {
     this.redis = new Redis({
       host: process.env.REDIS_HOST || 'localhost',
       port: parseInt(process.env.REDIS_PORT || '6379'),
@@ -95,6 +100,9 @@ export class HealthController {
       };
       result.status = result.status === 'unhealthy' ? 'unhealthy' : 'degraded';
     }
+
+    // Add circuit breaker stats
+    result.circuitBreakers = this.circuitBreaker.getStats();
 
     // Return 503 if unhealthy
     if (result.status === 'unhealthy') {
