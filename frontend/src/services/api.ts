@@ -52,6 +52,71 @@ class ApiClient {
     return response.data;
   }
 
+  // Commerce Service APIs (Multi-Domain Connector Framework)
+  async getProducts(storeId: string, filters?: {
+    category?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    const response = await this.routingApi.get('/api/v1/commerce/products', {
+      params: { storeId, ...filters },
+    });
+    return response.data;
+  }
+
+  async getProduct(productId: string, storeId: string) {
+    const response = await this.routingApi.get(`/api/v1/commerce/products/${productId}`, {
+      params: { storeId },
+    });
+    return response.data;
+  }
+
+  async createOrder(orderRequest: {
+    storeId: string;
+    customerId: string;
+    lineItems: Array<{
+      productId: string;
+      sku: string;
+      quantity: number;
+      unitPrice: number;
+    }>;
+    shippingAddress?: {
+      firstName: string;
+      lastName: string;
+      address1: string;
+      address2?: string;
+      city: string;
+      state: string;
+      postalCode: string;
+      country: string;
+      phone?: string;
+    };
+    billingAddress?: {
+      firstName: string;
+      lastName: string;
+      address1: string;
+      address2?: string;
+      city: string;
+      state: string;
+      postalCode: string;
+      country: string;
+      phone?: string;
+    };
+  }) {
+    const response = await this.routingApi.post('/api/v1/commerce/orders', orderRequest);
+    return response.data;
+  }
+
+  async getConnectors(storeId: string) {
+    const response = await this.routingApi.get('/api/v1/commerce/connectors', {
+      params: { storeId },
+    });
+    return response.data;
+  }
+
   // Health checks
   async checkAuthHealth() {
     const response = await this.authApi.get('/health');

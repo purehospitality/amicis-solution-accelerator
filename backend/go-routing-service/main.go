@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/amicis/go-routing-service/internal/registry"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus"
@@ -58,10 +59,11 @@ type HealthResponse struct {
 
 // App holds the application dependencies
 type App struct {
-	mongoClient     *mongo.Client
-	redisClient     RedisClient
-	storesDB        *mongo.Collection
-	circuitBreakers *CircuitBreakerWrapper
+	mongoClient        *mongo.Client
+	redisClient        RedisClient
+	storesDB           *mongo.Collection
+	circuitBreakers    *CircuitBreakerWrapper
+	connectorRegistry  *registry.ConnectorRegistry
 }
 
 // Prometheus metrics
@@ -177,6 +179,12 @@ func main() {
 		circuitBreakers: NewCircuitBreakerWrapper(),
 	}
 	
+	// Initialize connector registry with adapter factories
+	if err := app.initializeConnectorRegistry(dbName); err != nil {
+		log.Fatal().Err(err).Msg("Failed to initialize connector registry")
+	}
+	defer app.connectorRegistry.Close()
+	
 	// Initialize rate limiter (100 requests per second, burst of 200)
 	rateLimiter := NewRateLimiter(100, 200)
 	rateLimiter.Cleanup(5 * time.Minute)
@@ -210,8 +218,17 @@ func main() {
 		r.Use(JWTMiddleware)
 		r.Use(RateLimitMiddleware(rateLimiter)) // Apply rate limiting to protected routes
 		r.Route("/api/v1", func(r chi.Router) {
+			// Legacy routes
 			r.Get("/route", app.routeHandler)
 			r.Get("/stores", app.storesListHandler)
+			
+			// Commerce gateway routes (multi-domain connector framework)
+			r.Route("/commerce", func(r chi.Router) {
+				r.Get("/products", app.commerceProductsHandler)
+				r.Get("/products/{productId}", app.commerceProductHandler)
+				r.Post("/orders", app.commerceOrdersHandler)
+				r.Get("/connectors", app.commerceConnectorsHandler)
+			})
 		})
 	})
 
