@@ -117,6 +117,30 @@ class ApiClient {
     return response.data;
   }
 
+  // Wishlist APIs
+  async getWishlist(storeId: string, customerId: string) {
+    const response = await this.routingApi.get('/api/v1/commerce/wishlist', {
+      params: { storeId, customerId },
+    });
+    return response.data;
+  }
+
+  async addToWishlist(storeId: string, customerId: string, productId: string) {
+    const response = await this.routingApi.post('/api/v1/commerce/wishlist/items', {
+      storeId,
+      customerId,
+      productId,
+    });
+    return response.data;
+  }
+
+  async removeFromWishlist(storeId: string, customerId: string, itemId: string) {
+    const response = await this.routingApi.delete(`/api/v1/commerce/wishlist/items/${itemId}`, {
+      params: { storeId, customerId },
+    });
+    return response.data;
+  }
+
   // Health checks
   async checkAuthHealth() {
     const response = await this.authApi.get('/health');

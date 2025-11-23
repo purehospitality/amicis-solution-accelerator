@@ -3,6 +3,8 @@ import { useAuthStore } from './store/authStore';
 import LoginPage from './pages/LoginPage';
 import StoreSelectionPage from './pages/StoreSelectionPage';
 import HomePage from './pages/HomePage';
+import ProductsPage from './pages/ProductsPage';
+import WishlistPage from './pages/WishlistPage';
 import './App.css';
 
 function App() {
@@ -22,6 +24,14 @@ function App() {
         <Route
           path="/home"
           element={isAuthenticated ? <HomePage /> : <Navigate to="/login" />}
+        />
+        <Route
+          path="/products"
+          element={isAuthenticated ? <ProductsPage /> : <Navigate to="/login" />}
+        />
+        <Route
+          path="/wishlist"
+          element={isAuthenticated ? <WishlistPage /> : <Navigate to="/login" />}
         />
         <Route path="/" element={<Navigate to={isAuthenticated ? "/stores" : "/login"} />} />
       </Routes>

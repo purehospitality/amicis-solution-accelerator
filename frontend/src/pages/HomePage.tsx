@@ -45,6 +45,66 @@ export default function HomePage() {
           </div>
         </div>
 
+        {/* Quick Actions */}
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '1rem',
+          marginBottom: '2rem'
+        }}>
+          <button
+            onClick={() => navigate('/products', { state: location.state })}
+            className="card"
+            style={{
+              padding: '2rem 1.5rem',
+              cursor: 'pointer',
+              border: '2px solid #0051a5',
+              background: 'linear-gradient(to bottom right, #e3f2fd, #fff)',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-4px)';
+              e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,81,165,0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '';
+            }}
+          >
+            <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🛒</div>
+            <h3 style={{ margin: '0 0 0.5rem 0', color: '#0051a5' }}>Browse Products</h3>
+            <p style={{ margin: 0, fontSize: '0.875rem', color: '#666' }}>
+              View our catalog
+            </p>
+          </button>
+
+          <button
+            onClick={() => navigate('/wishlist', { state: location.state })}
+            className="card"
+            style={{
+              padding: '2rem 1.5rem',
+              cursor: 'pointer',
+              border: '2px solid #e91e63',
+              background: 'linear-gradient(to bottom right, #fce4ec, #fff)',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-4px)';
+              e.currentTarget.style.boxShadow = '0 8px 16px rgba(233,30,99,0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '';
+            }}
+          >
+            <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>❤️</div>
+            <h3 style={{ margin: '0 0 0.5rem 0', color: '#e91e63' }}>My Wishlist</h3>
+            <p style={{ margin: 0, fontSize: '0.875rem', color: '#666' }}>
+              Saved items
+            </p>
+          </button>
+        </div>
+
         <div className="card">
           <h2>Store Information</h2>
           <div style={{ marginTop: '1rem' }}>
