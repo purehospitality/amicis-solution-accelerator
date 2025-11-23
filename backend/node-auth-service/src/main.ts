@@ -4,6 +4,7 @@ import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { createLogger } from './common/logger.config';
 import { CorrelationIdMiddleware } from './common/correlation-id.middleware';
+import helmet from 'helmet';
 
 async function bootstrap() {
   const logger = createLogger();
@@ -12,8 +13,31 @@ async function bootstrap() {
   // Get port from environment variable, default to 3000
   const port = process.env.PORT || 3000;
   
+  // Security headers with Helmet
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", "data:", "https:"],
+      },
+    },
+    hsts: {
+      maxAge: 31536000, // 1 year in seconds
+      includeSubDomains: true,
+      preload: true,
+    },
+  }));
+  
   // Enable CORS for mobile apps
-  app.enableCors();
+  app.enableCors({
+    origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-ID'],
+    credentials: true,
+    maxAge: 3600, // 1 hour
+  });
 
   // Apply correlation ID middleware globally
   app.use(new CorrelationIdMiddleware().use.bind(new CorrelationIdMiddleware()));

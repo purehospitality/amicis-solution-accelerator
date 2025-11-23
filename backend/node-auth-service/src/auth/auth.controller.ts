@@ -1,9 +1,11 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, Req, Inject, LoggerService } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, Req, Inject, LoggerService, UsePipes, ValidationPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { Request } from 'express';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { TokenExchangeDto } from './dto/token-exchange.dto';
+import { ExchangeTokenDto } from './dto/exchange-token.dto';
 import { Public } from './decorators/public.decorator';
 
 @ApiTags('auth')
@@ -17,11 +19,13 @@ export class AuthController {
   @Public()
   @Post('exchange')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 20, ttl: 60000 } }) // 20 requests per minute
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({ 
     summary: 'Exchange user token for backend access token',
     description: 'Accepts a tenant-prefixed user token and returns a backend-specific access token with tenant information'
   })
-  @ApiBody({ type: TokenExchangeDto })
+  @ApiBody({ type: ExchangeTokenDto })
   @ApiResponse({ 
     status: 200, 
     description: 'Token exchange successful',
@@ -40,9 +44,11 @@ export class AuthController {
       }
     }
   })
+  @ApiResponse({ status: 400, description: 'Invalid request format' })
   @ApiResponse({ status: 401, description: 'Invalid token format' })
   @ApiResponse({ status: 404, description: 'Tenant not found' })
-  async exchangeToken(@Body() dto: TokenExchangeDto, @Req() req: Request) {
+  @ApiResponse({ status: 429, description: 'Too many requests' })
+  async exchangeToken(@Body() dto: ExchangeTokenDto, @Req() req: Request) {
     const correlationId = req.correlationId || 'unknown';
     
     this.logger.log(
