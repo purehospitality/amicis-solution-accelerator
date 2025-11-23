@@ -56,6 +56,13 @@ spec:
             name: go-routing-service
             port:
               number: 8080
+      - path: /api/v1/commerce
+        pathType: Prefix
+        backend:
+          service:
+            name: go-routing-service
+            port:
+              number: 8080
       - path: /auth
         pathType: Prefix
         backend:
