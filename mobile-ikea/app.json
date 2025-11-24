@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "IKEA Scan & Go",
+    "slug": "ikea-scan-and-go",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "extra": {
+      "apiBaseUrl": "http://api.4.157.44.54.nip.io/api/v1",
+      "router": {}
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ikea.scanandgo"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFCC00"
+      },
+      "package": "com.ikea.scanandgo",
+      "permissions": [
+        "CAMERA",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "CAMERA",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow IKEA Scan & Go to scan product barcodes"
+        }
+      ],
+      [
+        "expo-barcode-scanner",
+        {
+          "cameraPermission": "Allow IKEA Scan & Go to scan product barcodes"
+        }
+      ]
+    ]
+  }
+}

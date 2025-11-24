@@ -222,12 +222,24 @@ func main() {
 			r.Get("/route", app.routeHandler)
 			r.Get("/stores", app.storesListHandler)
 			
+			// Store details for mobile app
+			r.Get("/stores/{storeId}", app.storeDetailsHandler)
+			
 			// Commerce gateway routes (multi-domain connector framework)
 			r.Route("/commerce", func(r chi.Router) {
 				r.Get("/products", app.commerceProductsHandler)
 				r.Get("/products/{productId}", app.commerceProductHandler)
+				r.Get("/products/by-article/{articleNumber}", app.productByArticleHandler)
 				r.Post("/orders", app.commerceOrdersHandler)
 				r.Get("/connectors", app.commerceConnectorsHandler)
+				
+				// IKEA Scan & Go mobile endpoints
+				r.Get("/availability/{storeId}/{articleNumber}", app.productAvailabilityHandler)
+				r.Get("/pricing/{storeId}/{articleNumber}", app.productPricingHandler)
+				
+				// Checkout sessions
+				r.Post("/checkout/sessions", app.createCheckoutSessionHandler)
+				r.Get("/checkout/sessions/{sessionId}/status", app.getCheckoutSessionStatusHandler)
 				
 				// Wishlist routes
 				r.Get("/wishlist", app.commerceWishlistHandler)
